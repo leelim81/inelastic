@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inelastic — Live Record</title>
+<style>
+  :root{
+    --ink:#111; --gray:#767b82; --hair:#e3e5e8; --panel:#f5f6f7;
+    --red:#e30613;                     /* Swiss accent — LIVE only */
+    --a-bt:#4e8fd9; --a-pp:#2a78d6; --a-lv:#1b5eb0;   /* strategy A: backtest / paper / live (light→dark) */
+    --b-bt:#897ed6; --b-pp:#7a6fd0; --b-lv:#4a3aa7;   /* strategy B */
+    --spy:#9aa0a6;
+    --up:#2a78d6; --down:#e30613;      /* diverging poles for monthly returns */
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--ink);background:#fff;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px 80px}
+  header{border-bottom:2px solid var(--ink);padding:28px 0 18px;margin-bottom:0}
+  .kicker{font-size:11px;letter-spacing:.14em;color:var(--gray);text-transform:uppercase}
+  h1{font-size:clamp(28px,5vw,44px);font-weight:700;letter-spacing:-.02em;line-height:1.02;margin-top:6px}
+  .sub{font-size:13px;color:var(--gray);margin-top:8px;max-width:64ch;line-height:1.5}
+  nav{display:flex;gap:0;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+  nav button{appearance:none;background:none;border:none;border-bottom:2px solid transparent;
+    font:inherit;font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:14px 18px 12px;
+    cursor:pointer;color:var(--gray)}
+  nav button.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:700}
+  section{padding-top:28px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--hair);border:1px solid var(--hair)}
+  .card{background:#fff;padding:18px 20px}
+  .card h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+  .card .mandate{font-size:17px;font-weight:700;letter-spacing:-.01em;margin:8px 0 10px;line-height:1.25}
+  .card p{font-size:13px;color:var(--gray);line-height:1.5}
+  .tag{display:inline-block;font-size:10px;letter-spacing:.12em;padding:2px 6px;border:1px solid var(--ink);
+       text-transform:uppercase;margin-left:8px;vertical-align:2px}
+  .controls{display:flex;align-items:baseline;justify-content:space-between;margin:30px 0 8px;flex-wrap:wrap;gap:10px}
+  .controls h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+  .controls h2 .hint{color:var(--gray);font-weight:400}
+  .ctrlwrap{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .seg{display:flex;border:1px solid var(--ink);flex-wrap:wrap}
+  .seg button{appearance:none;border:none;background:#fff;font:inherit;font-size:11px;letter-spacing:.08em;
+    padding:6px 12px;cursor:pointer;text-transform:uppercase;border-left:1px solid var(--hair)}
+  .seg button:first-child{border-left:none}
+  .seg button.on{background:var(--ink);color:#fff}
+  .pan{display:flex;gap:6px;align-items:center}
+  .pan button{appearance:none;border:1px solid var(--ink);background:#fff;font:inherit;font-size:12px;
+    width:30px;height:28px;cursor:pointer}
+  .pan button:disabled{border-color:var(--hair);color:var(--hair);cursor:default}
+  .scoreline{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--hair);border-bottom:none;
+    background:var(--panel)}
+  .scoreline .sc{flex:1 1 0;min-width:120px;padding:9px 14px;border-left:1px solid var(--hair)}
+  .scoreline .sc:first-child{border-left:none}
+  .scoreline .lbl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gray)}
+  .scoreline .val{font-size:19px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;margin-top:2px}
+  .scoreline .val.pos{color:var(--a-lv)} .scoreline .val.neg{color:var(--down)}
+  .scoreline .sub2{font-size:10px;color:var(--gray);margin-top:1px}
+  #chartbox,#ddbox{border:1px solid var(--hair);position:relative}
+  svg{display:block;width:100%;height:420px}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;font-size:11px;letter-spacing:.06em;color:var(--gray);
+    padding:10px 2px;text-transform:uppercase}
+  .sw{display:inline-block;width:18px;height:3px;vertical-align:3px;margin-right:6px}
+  #tip,#ddtip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;font-size:11px;
+    padding:6px 9px;display:none;white-space:pre;line-height:1.55;z-index:5;font-variant-numeric:tabular-nums}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gray);text-align:left;
+     border-bottom:1px solid var(--ink);padding:8px 10px 6px}
+  td{border-bottom:1px solid var(--hair);padding:9px 10px;vertical-align:top}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.name{font-weight:700}
+  .dot{display:inline-block;width:9px;height:9px;margin-right:7px;vertical-align:0}
+  .pos{color:var(--a-lv)} .neg{color:var(--down)}
+  .ph{font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border:1px solid}
+  .ph.backtest{color:var(--gray);border-color:var(--gray)}
+  .ph.paper{color:var(--a-pp);border-color:var(--a-pp)}
+  .ph.live{color:var(--red);border-color:var(--red)}
+  .upnote,.note{font-size:12px;color:var(--gray);margin:6px 0 16px;line-height:1.5;max-width:74ch}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--hair);
+    border:1px solid var(--hair);margin-bottom:14px}
+  .tile{background:#fff;padding:14px 16px}
+  .tile .lbl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gray)}
+  .tile .big{font-size:26px;font-weight:700;letter-spacing:-.015em;font-variant-numeric:tabular-nums;margin-top:4px}
+  .tile .cap{font-size:11px;color:var(--gray);margin-top:2px}
+  .hmwrap{overflow-x:auto;border:1px solid var(--hair)}
+  .tscroll{overflow-x:auto}
+  #stats{min-width:680px} #fwdrec{min-width:560px} #up{min-width:460px} #past{min-width:520px}
+  table.hm{font-size:12px;min-width:640px}
+  table.hm th{border-bottom:1px solid var(--hair);padding:7px 6px;text-align:right;font-size:9.5px}
+  table.hm th:first-child{text-align:left}
+  table.hm td{border-bottom:1px solid #f0f1f2;padding:7px 6px;text-align:right;font-variant-numeric:tabular-nums}
+  table.hm td.yr{text-align:left;font-weight:700;color:var(--ink)}
+  table.hm td.ytd{font-weight:700;border-left:1px solid var(--hair)}
+  .footer{margin-top:56px;border-top:2px solid var(--ink);padding-top:12px;font-size:11px;
+          color:var(--gray);line-height:1.6}
+  @media (max-width:720px){
+    .grid{grid-template-columns:1fr}svg{height:320px}
+    .tiles{grid-template-columns:1fr}
+    .scoreline .sc{flex-basis:50%}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Systematic Programs · Verified Record · Read-Only</div>
+    <h1>Inelastic &amp; Gated Premium</h1>
+    <div class="sub">Two rule-based programs, published as a percent index so accounts of different size
+      share one ruler. The chart measures <b>growth over whatever period you select</b> — every line
+      starts at 0% on the left edge. History is a walk-forward simulation of the production code; paper
+      and live segments are appended as they occur and never revised.</div>
+  </header>
+  <nav>
+    <button id="tab-perf" class="on">Performance</button>
+    <button id="tab-record">Track Record</button>
+    <button id="tab-dd">Drawdown</button>
+    <button id="tab-logs">Logs</button>
+  </nav>
+
+  <!-- ============================ PERFORMANCE ============================ -->
+  <section id="perf">
+    <div class="grid" id="mandates"></div>
+
+    <div class="controls">
+      <h2>Growth over the selected period<span class="hint"> · vs holding the S&amp;P 500</span></h2>
+      <div class="ctrlwrap">
+        <div class="seg" id="perf-range"></div>
+        <div class="pan">
+          <button id="back">‹</button><button id="fwd">›</button>
+        </div>
+      </div>
+    </div>
+    <div class="scoreline" id="perf-score"></div>
+    <div id="chartbox"><svg id="chart" viewBox="0 0 1040 420" preserveAspectRatio="none"></svg><div id="tip"></div></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <!-- ============================ TRACK RECORD ============================ -->
+  <section id="record" hidden>
+    <div class="controls"><h2>Statistics — full walk-forward history</h2></div>
+    <div class="note" id="record-note"></div>
+    <div class="tscroll"><table id="stats"><thead><tr>
+      <th>Program</th><th class="num">CAGR</th><th class="num">Volatility</th><th class="num">Max drawdown</th>
+      <th class="num">Sharpe</th><th class="num">Best mo.</th><th class="num">Worst mo.</th>
+      <th class="num">% Pos. mo.</th><th class="num">Corr. S&amp;P</th><th class="num">Beta</th>
+    </tr></thead><tbody></tbody></table></div>
+
+    <div class="controls" style="margin-top:34px"><h2>Forward record — appended live, never revised</h2></div>
+    <div class="note">The un-simulated segment: how each program has actually done since it began trading
+      paper, and since it went live. Short by nature — shown without embellishment.</div>
+    <div class="tscroll"><table id="fwdrec"><thead><tr>
+      <th>Since</th><th>Phase</th><th class="num">Days</th>
+      <th class="num">A</th><th class="num">B</th><th class="num">S&amp;P 500</th>
+      <th class="num">A vs S&amp;P</th><th class="num">B vs S&amp;P</th>
+    </tr></thead><tbody></tbody></table></div>
+
+    <div class="controls" style="margin-top:34px">
+      <h2>Monthly returns</h2>
+      <div class="seg" id="hm-series"></div>
+    </div>
+    <div class="note" id="hm-note"></div>
+    <div class="hmwrap"><div id="hmtable"></div></div>
+    <div class="legend" style="margin-top:8px">
+      <span><span class="sw" style="background:var(--down);height:11px;width:11px;border-radius:0"></span>Loss</span>
+      <span><span class="sw" style="background:var(--up);height:11px;width:11px"></span>Gain</span>
+      <span style="color:var(--gray)">Cell shade ∝ size of the month's move · YTD compounds the year</span>
+    </div>
+  </section>
+
+  <!-- ============================ DRAWDOWN ============================ -->
+  <section id="dd" hidden>
+    <div class="controls">
+      <h2>Drawdown from peak<span class="hint"> · how deep, how long underwater</span></h2>
+      <div class="ctrlwrap"><div class="seg" id="dd-range"></div></div>
+    </div>
+    <div class="note">Percent below each program's own running high-water mark. The mandate is a
+      structurally bounded downside — this is where you check whether the record honours it. Depth over
+      the full history is shown in the tiles regardless of the range selected.</div>
+    <div class="tiles" id="dd-tiles"></div>
+    <div id="ddbox"><svg id="ddchart" viewBox="0 0 1040 420" preserveAspectRatio="none"></svg><div id="ddtip"></div></div>
+    <div class="legend" id="dd-legend"></div>
+  </section>
+
+  <!-- ============================ LOGS ============================ -->
+  <section id="logs" hidden>
+    <h2 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase">Upcoming — next month</h2>
+    <div class="upnote">Conditional items execute only if their rule qualifies; the rules themselves are not published.</div>
+    <div class="tscroll"><table id="up"><thead><tr><th style="width:130px">When</th><th style="width:90px">Program</th><th style="width:110px">Type</th><th>Action</th></tr></thead><tbody></tbody></table></div>
+    <h2 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin-top:40px">Transaction record</h2>
+    <div class="upnote">Sanitized: instrument class, direction and portfolio impact only.</div>
+    <div class="tscroll"><table id="past"><thead><tr><th style="width:110px">Date</th><th style="width:100px">Phase</th><th style="width:90px">Program</th><th>Event</th><th style="width:90px;text-align:right">Impact</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <div class="footer" id="foot"></div>
+</div>
+
+<script>
+let D=null;
+const COL={A:{backtest:"var(--a-bt)",paper:"var(--a-pp)",live:"var(--a-lv)"},
+           B:{backtest:"var(--b-bt)",paper:"var(--b-pp)",live:"var(--b-lv)"},SPY:"var(--spy)"};
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v.slice(4,-1)).trim()||v;
+const RANGES=["1M","3M","6M","YTD","1Y","LIVE","MAX"];
+let perf={preset:"6M",res:"daily",a:0,b:0}, ddr={preset:"MAX",res:"monthly",a:0,b:0}, hmKey="A";
+
+fetch("data.json").then(r=>r.json()).then(d=>{D=d;init();});
+
+/* ---------- helpers ---------- */
+const mean=x=>x.reduce((s,v)=>s+v,0)/x.length;
+const std=x=>{const m=mean(x);return Math.sqrt(x.reduce((s,v)=>s+(v-m)*(v-m),0)/(x.length-1));};
+const nav=(s,k)=>s[k].map(v=>100+v);                       // percent-index -> relative NAV
+const ms=d=>Date.parse(d);
+function idxByDate(dates,t){for(let i=0;i<dates.length;i++)if(ms(dates[i])>=t)return i;return dates.length-1;}
+function phaseOf(date){const p=D.phases;
+  if(p.live_start&&date>=p.live_start)return"live";
+  if(p.paper_start&&date>=p.paper_start)return"paper";return"backtest";}
+const sgn=(v,d=1)=>{const s=Math.abs(v).toFixed(d);return(parseFloat(s)===0?"":v>=0?"+":"−")+s+"%";};   // signed, no −0
+const sgnR=(v,d=1)=>{const s=Math.abs(v*100).toFixed(d);return(parseFloat(s)===0?"":v>=0?"+":"−")+s+"%";};// decimal return
+const fx=(v,d)=>v.toFixed(d).replace("-","−");                    // plain number, proper minus glyph
+const cls=v=>v>=0?"pos":"neg";
+
+/* ---------- range windows ---------- */
+function windowFor(preset){
+  const dts=D.daily.dates,n=dts.length,last=ms(dts[n-1]);
+  const back=m=>{const d=new Date(last);d.setMonth(d.getMonth()-m);return d.getTime();};
+  if(preset==="MAX")  return {res:"monthly",a:0,b:D.monthly.dates.length-1};
+  if(preset==="LIVE"){const s=D.phases.live_start||D.phases.paper_start;
+    return {res:"daily",a:s?idxByDate(dts,ms(s)):Math.max(0,n-22),b:n-1};}
+  if(preset==="YTD"){const y=new Date(last).getFullYear();
+    return {res:"daily",a:idxByDate(dts,ms(y+"-01-01")),b:n-1};}
+  const map={"1M":1,"3M":3,"6M":6,"1Y":12};
+  return {res:"daily",a:idxByDate(dts,back(map[preset])),b:n-1};
+}
+
+/* ==================================================================== */
+function init(){
+  const m=document.getElementById("mandates");
+  m.innerHTML=D.strategies.map(s=>`<div class="card"><h2>Program ${s.id} — ${s.name}
+    ${D.phases.live_start?'<span class="tag" style="color:var(--red);border-color:var(--red)">Live</span>':
+      D.phases.paper_start?'<span class="tag">Paper</span>':'<span class="tag">Backtest</span>'}</h2>
+    <div class="mandate">${s.mandate}</div><p>${s.holds}</p></div>`).join("");
+
+  document.getElementById("legend").innerHTML=`
+    <span><span class="sw" style="background:var(--a-pp)"></span>A Inelastic</span>
+    <span><span class="sw" style="background:var(--b-pp)"></span>B Gated Premium</span>
+    <span><span class="sw" style="background:var(--spy)"></span>S&amp;P 500 (held)</span>
+    <span style="margin-left:auto">shade: <span style="color:var(--a-bt)">■</span> backtest
+      <span style="color:var(--a-pp)">■</span> paper <span style="color:var(--a-lv)">■</span> live
+      ${D.phases.demo?'<b style="color:var(--red)"> · phase colours shown in demo</b>':''}</span>`;
+  document.getElementById("dd-legend").innerHTML=document.getElementById("legend").innerHTML;
+
+  document.getElementById("foot").innerHTML=
+    `Generated ${D.generated}. Percent of each program's inception value, rebased to the start of the `+
+    `displayed period; capital bases differ (not shown). History before the marked boundary is a `+
+    `simulation of the production trading code against historical data (modeled costs); simulated results `+
+    `are hypothetical and not indicative of future returns. Nothing here is investment advice or an offer `+
+    `of any security.`;
+
+  const RG=(D.phases.live_start||D.phases.paper_start)?RANGES:RANGES.filter(r=>r!=="LIVE"); // no LIVE tab pre-launch
+  buildSeg("perf-range",RG,perf.preset,p=>{setPreset(perf,p);drawPerf();});
+  buildSeg("dd-range",RG,ddr.preset,p=>{setPreset(ddr,p);drawDD();});
+  buildSeg("hm-series",[["A","A · Inelastic"],["B","B · Gated Premium"],["SPY","S&P 500"]],hmKey,
+    k=>{hmKey=k;renderHeatmap();});
+
+  document.getElementById("back").onclick=()=>panPerf(-1);
+  document.getElementById("fwd").onclick=()=>panPerf(1);
+  document.getElementById("tab-perf").onclick=()=>tab("perf");
+  document.getElementById("tab-record").onclick=()=>tab("record");
+  document.getElementById("tab-dd").onclick=()=>tab("dd");
+  document.getElementById("tab-logs").onclick=()=>tab("logs");
+  const c=document.getElementById("chart");
+  c.addEventListener("mousemove",hoverPerf);c.addEventListener("mouseleave",()=>tip.style.display="none");
+
+  setPreset(perf,perf.preset);setPreset(ddr,ddr.preset);
+  drawPerf();renderRecord();drawDD();fillLogs();
+}
+function buildSeg(id,items,cur,cb){
+  const el=document.getElementById(id);
+  el.innerHTML=items.map(it=>{const[v,lab]=Array.isArray(it)?it:[it,it];
+    return `<button data-v="${v}" class="${v===cur?"on":""}">${lab}</button>`;}).join("");
+  el.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    el.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");cb(b.dataset.v);});
+}
+function setPreset(st,p){st.preset=p;const w=windowFor(p);st.res=w.res;st.a=w.a;st.b=w.b;
+  const bar=st===perf?"perf-range":"dd-range";
+  document.querySelectorAll(`#${bar} button`).forEach(b=>b.classList.toggle("on",b.dataset.v===p));}
+function panPerf(dir){
+  const s=D[perf.res],n=s.dates.length,w=perf.b-perf.a,step=Math.max(1,Math.round(w/2));
+  let a=perf.a+dir*step;a=Math.max(0,Math.min(a,n-1-w));perf.a=a;perf.b=a+w;perf.preset="";
+  document.querySelectorAll("#perf-range button").forEach(b=>b.classList.remove("on"));drawPerf();}
+function tab(t){
+  for(const s of["perf","record","dd","logs"])document.getElementById(s).hidden=(s!==t);
+  for(const s of["perf","record","dd","logs"])
+    document.getElementById("tab-"+s).classList.toggle("on",s===t);
+}
+
+/* ==================== PERFORMANCE CHART ==================== */
+const PADL=58,PADR=52,PADT=18,PADB=34,W=1040,H=420;
+let pscale=null;
+function drawPerf(){
+  const s=D[perf.res],a=perf.a,b=perf.b,dates=s.dates.slice(a,b+1);
+  const base={A:100+s.A[a],B:100+s.B[a],SPY:100+s.SPY[a]};
+  const reb=k=>{const o=[];for(let i=a;i<=b;i++)o.push(((100+s[k][i])/base[k]-1)*100);return o;};
+  const RA=reb("A"),RB=reb("B"),RS=reb("SPY");
+  const all=[...RA,...RB,...RS,0];
+  let lo=Math.min(...all),hi=Math.max(...all);const pad=(hi-lo)*0.08||1;lo-=pad;hi+=pad;
+  const x=i=>PADL+(W-PADL-PADR)*i/Math.max(1,dates.length-1);
+  const y=v=>PADT+(H-PADT-PADB)*(1-(v-lo)/(hi-lo));
+  const dec=(hi-lo)<8?1:0;
+  let g="";
+  for(let t=0;t<=5;t++){const v=lo+(hi-lo)*t/5,yy=y(v);
+    g+=`<line x1="${PADL}" x2="${W-PADR}" y1="${yy}" y2="${yy}" stroke="#eceef0" stroke-width="1"/>`+
+       `<text x="${PADL-8}" y="${yy+3.5}" text-anchor="end" font-size="10.5" fill="#767b82">${sgn(v,dec)}</text>`;}
+  // emphasized zero baseline (the rebase origin)
+  if(lo<0&&hi>0){const y0=y(0);
+    g+=`<line x1="${PADL}" x2="${W-PADR}" y1="${y0}" y2="${y0}" stroke="#c2c6ca" stroke-width="1.4"/>`;}
+  const nlab=Math.min(6,dates.length);
+  for(let k=0;k<nlab;k++){const i=Math.round(k*(dates.length-1)/(nlab-1||1));
+    g+=`<text x="${x(i)}" y="${H-12}" text-anchor="middle" font-size="10.5" fill="#767b82">${dates[i]}</text>`;}
+  const marks=[];
+  for(const[key,lab]of[["paper_start","PAPER"],["live_start","LIVE"]]){
+    const d0=D.phases[key];if(!d0)continue;const i=dates.findIndex(dd=>dd>=d0);if(i<0)continue;
+    marks.push({lab,x:x(i),col:lab==="LIVE"?css("var(--red)"):"#111"});}
+  for(const m of marks)
+    g+=`<line x1="${m.x}" x2="${m.x}" y1="${PADT}" y2="${H-PADB}" stroke="${m.col}" stroke-width="1" stroke-dasharray="2 3"/>`;
+  const placed=[];                                    // labels: prefer LIVE, drop PAPER if the two markers coincide
+  for(let k=marks.length-1;k>=0;k--){const m=marks[k];
+    if(placed.some(px=>Math.abs(px-m.x)<44))continue;placed.push(m.x);
+    g+=`<text x="${m.x+4}" y="${PADT+10}" font-size="9.5" letter-spacing="1.5" fill="${m.col}">${m.lab}</text>`;}
+  g+=segPath(RS,dates,x,y,()=>css("var(--spy)"),1.4);
+  g+=segPath(RA,dates,x,y,d=>css(COL.A[phaseOf(d)]),2.2);
+  g+=segPath(RB,dates,x,y,d=>css(COL.B[phaseOf(d)]),2.2);
+  // direct end labels (secondary encoding for CVD)
+  const ends=[["S&P",RS[RS.length-1],css("var(--spy)")],
+              ["A",RA[RA.length-1],css("var(--a-lv)")],
+              ["B",RB[RB.length-1],css("var(--b-lv)")]].sort((p,q)=>q[1]-p[1]);
+  let prevY=-99;for(const[lab,v,col]of ends){let yy=y(v);if(yy-prevY<12)yy=prevY+12;prevY=yy;
+    g+=`<text x="${W-PADR+5}" y="${yy+3.5}" font-size="11" font-weight="700" fill="${col}">${lab}</text>`;}
+  g+=`<line id="cross" x1="0" x2="0" y1="${PADT}" y2="${H-PADB}" stroke="#111" stroke-width="1" stroke-dasharray="2 2" style="display:none"/>`;
+  document.getElementById("chart").innerHTML=g;
+  pscale={x,y,a,b,dates,RA,RB,RS};
+  document.getElementById("back").disabled=(a===0);
+  document.getElementById("fwd").disabled=(b>=s.dates.length-1);
+  // scoreline = period return of each line (== rebased endpoint)
+  const end=arr=>arr[arr.length-1];
+  const rangeLbl=perf.preset||`${dates[0]} → ${dates[dates.length-1]}`;
+  const sc=[["A Inelastic",end(RA)],["B Gated Premium",end(RB)],["S&P 500 (held)",end(RS)],
+            ["A vs S&P",end(RA)-end(RS)],["B vs S&P",end(RB)-end(RS)]];
+  document.getElementById("perf-score").innerHTML=
+    `<div class="sc" style="flex:0 0 auto;min-width:96px"><div class="lbl">Period</div>
+       <div class="val" style="font-size:15px">${rangeLbl}</div><div class="sub2">rebased to 0% at start</div></div>`+
+    sc.map(([l,v])=>`<div class="sc"><div class="lbl">${l}</div>
+       <div class="val ${cls(v)}">${sgn(v,1)}</div></div>`).join("");
+}
+function segPath(vals,dates,x,y,colAt,w){
+  let out="",d="",cur=null;
+  for(let i=0;i<vals.length;i++){const c=colAt(dates[i]);
+    if(c!==cur){if(d)out+=`<path d="${d}" fill="none" stroke="${cur}" stroke-width="${w}"/>`;
+      d=`M ${x(i)} ${y(vals[i])}`;cur=c;}else d+=` L ${x(i)} ${y(vals[i])}`;}
+  if(d)out+=`<path d="${d}" fill="none" stroke="${cur}" stroke-width="${w}"/>`;return out;}
+const tip=document.getElementById("tip");
+function hoverPerf(ev){
+  if(!pscale)return;const r=ev.currentTarget.getBoundingClientRect();
+  const px=(ev.clientX-r.left)*W/r.width;
+  const n=pscale.dates.length,i=Math.max(0,Math.min(n-1,Math.round((px-PADL)/((W-PADL-PADR)/Math.max(1,n-1)))));
+  const d=pscale.dates[i],A=pscale.RA[i],B=pscale.RB[i],S=pscale.RS[i];
+  const cr=document.getElementById("cross");if(cr){cr.setAttribute("x1",pscale.x(i));cr.setAttribute("x2",pscale.x(i));cr.style.display="block";}
+  tip.style.display="block";
+  tip.textContent=`${d}  ·  ${phaseOf(d).toUpperCase()}\nA  ${sgn(A,2)}   (vs S&P ${sgn(A-S,2)})\nB  ${sgn(B,2)}   (vs S&P ${sgn(B-S,2)})\nS&P ${sgn(S,2)}`;
+  const bx=document.getElementById("chartbox").getBoundingClientRect();
+  tip.style.left=Math.min(ev.clientX-bx.left+14,bx.width-200)+"px";
+  tip.style.top=(ev.clientY-bx.top+10)+"px";
+}
+
+/* ==================== STATISTICS ==================== */
+function statsFull(key){
+  const d=D.daily,n=d.dates.length,v=nav(d,key),vs=nav(d,"SPY");
+  const r=[],rs=[];for(let i=1;i<n;i++){r.push(v[i]/v[i-1]-1);rs.push(vs[i]/vs[i-1]-1);}
+  const yrs=(ms(d.dates[n-1])-ms(d.dates[0]))/(365.25*864e5);
+  const cagr=Math.pow(v[n-1]/v[0],1/yrs)-1;
+  const vol=std(r)*Math.sqrt(252), shp=mean(r)/std(r)*Math.sqrt(252);
+  let pk=v[0],mdd=0;for(let i=0;i<n;i++){pk=Math.max(pk,v[i]);mdd=Math.min(mdd,v[i]/pk-1);}
+  const mr=monthlyRets(key).map(o=>o.r);
+  const best=Math.max(...mr),worst=Math.min(...mr),pos=mr.filter(x=>x>0).length/mr.length;
+  const cov=mean(r.map((x,i)=>x*rs[i]))-mean(r)*mean(rs);
+  const corr=key==="SPY"?1:cov/(std(r)*std(rs)), beta=key==="SPY"?1:cov/(std(rs)**2);
+  return{cagr,vol,shp,mdd,best,worst,pos,corr,beta};
+}
+function monthlyRets(key){
+  const m=D.monthly,v=nav(m,key),out=[];
+  for(let i=0;i<m.dates.length;i++){const prev=i===0?100:v[i-1];
+    out.push({y:+m.dates[i].slice(0,4),m:+m.dates[i].slice(5,7),r:v[i]/prev-1});}
+  return out;
+}
+function sinceRow(label,phase,startDate){
+  if(!startDate)return"";
+  const d=D.daily,a=idxByDate(d.dates,ms(startDate)),b=d.dates.length-1;
+  const ret=k=>((100+d[k][b])/(100+d[k][a])-1)*100;
+  const A=ret("A"),B=ret("B"),S=ret("SPY");
+  return `<tr><td class="name">${startDate}</td><td><span class="ph ${phase}">${label}</span></td>
+    <td class="num">${b-a}</td>
+    <td class="num ${cls(A)}">${sgn(A,2)}</td><td class="num ${cls(B)}">${sgn(B,2)}</td>
+    <td class="num">${sgn(S,2)}</td>
+    <td class="num ${cls(A-S)}">${sgn(A-S,2)}</td><td class="num ${cls(B-S)}">${sgn(B-S,2)}</td></tr>`;
+}
+function renderRecord(){
+  const rows=[["A","A Inelastic","var(--a-pp)"],["B","B Gated Premium","var(--b-pp)"],["SPY","S&P 500 (held)","var(--spy)"]];
+  document.getElementById("record-note").textContent=
+    `Computed from ${D.daily.dates[0]} to ${D.daily.dates[D.daily.dates.length-1]} `+
+    `(${(( ms(D.daily.dates[D.daily.dates.length-1])-ms(D.daily.dates[0]))/(365.25*864e5)).toFixed(1)} years). `+
+    `Sharpe uses a 0% cash rate so all three series are compared on one footing. Correlation and beta are to the S&P 500, daily.`;
+  document.querySelector("#stats tbody").innerHTML=rows.map(([k,lab,c])=>{
+    const s=statsFull(k);
+    return `<tr><td class="name"><span class="dot" style="background:${c}"></span>${lab}</td>
+      <td class="num">${(s.cagr*100).toFixed(1)}%</td>
+      <td class="num">${(s.vol*100).toFixed(1)}%</td>
+      <td class="num neg">${fx(s.mdd*100,1)}%</td>
+      <td class="num">${fx(s.shp,2)}</td>
+      <td class="num pos">${sgnR(s.best,1)}</td>
+      <td class="num neg">${sgnR(s.worst,1)}</td>
+      <td class="num">${(s.pos*100).toFixed(0)}%</td>
+      <td class="num">${fx(s.corr,2)}</td>
+      <td class="num">${fx(s.beta,2)}</td></tr>`;}).join("");
+  const fwd=sinceRow("Paper","paper",D.phases.paper_start)+sinceRow("Live","live",D.phases.live_start);
+  document.querySelector("#fwdrec tbody").innerHTML=fwd||
+    `<tr><td colspan="8" style="color:var(--gray)">No forward record yet — still in walk-forward simulation.</td></tr>`;
+  renderHeatmap();
+}
+function renderHeatmap(){
+  const rows=monthlyRets(hmKey), byYear={};
+  for(const o of rows){(byYear[o.y]=byYear[o.y]||{})[o.m]=o.r;}
+  const years=Object.keys(byYear).map(Number).sort((a,b)=>a-b);
+  const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const cap=hmKey==="SPY"?0.09:0.05;
+  const shade=r=>{if(r==null)return"background:transparent";
+    const t=Math.max(-1,Math.min(1,r/cap)),al=(Math.abs(t)*0.55).toFixed(3);
+    return `background:rgba(${t>=0?"42,120,214":"227,6,19"},${al})`;};
+  let h=`<table class="hm"><thead><tr><th>Year</th>${MON.map(m=>`<th>${m}</th>`).join("")}<th class="ytd">YTD</th></tr></thead><tbody>`;
+  for(const y of years){
+    let ytd=1,any=false;
+    let tds="";
+    for(let m=1;m<=12;m++){const r=byYear[y][m];
+      if(r==null)tds+=`<td></td>`;else{ytd*=(1+r);any=true;
+        tds+=`<td style="${shade(r)}">${sgnR(r,1)}</td>`;}}
+    const yv=any?ytd-1:null;
+    h+=`<tr><td class="yr">${y}</td>${tds}<td class="ytd" style="${shade(yv)}">${yv==null?"":sgnR(yv,1)}</td></tr>`;
+  }
+  h+=`</tbody></table>`;
+  document.getElementById("hmtable").innerHTML=h;
+  document.getElementById("hm-note").textContent=
+    (hmKey==="A"?"Program A":hmKey==="B"?"Program B":"The S&P 500")+
+    " — month-by-month total return. Colour saturates toward "+(cap*100)+"% in a month.";
+}
+
+/* ==================== DRAWDOWN (underwater) ==================== */
+let dscale=null;
+function ddSeries(vArr){let pk=vArr[0];return vArr.map(v=>{pk=Math.max(pk,v);return (v/pk-1)*100;});}
+function drawDD(){
+  const s=D[ddr.res],a=ddr.a,b=ddr.b,dates=s.dates.slice(a,b+1);
+  const DA=ddSeries(nav(s,"A").slice(a,b+1)),DB=ddSeries(nav(s,"B").slice(a,b+1)),DS=ddSeries(nav(s,"SPY").slice(a,b+1));
+  let lo=Math.min(0,...DA,...DB,...DS);const hi=0;lo*=1.08;
+  const x=i=>PADL+(W-PADL-PADR)*i/Math.max(1,dates.length-1);
+  const y=v=>PADT+(H-PADT-PADB)*(1-(v-lo)/(hi-lo));
+  let g="";
+  for(let t=0;t<=5;t++){const v=lo*t/5,yy=y(v);
+    g+=`<line x1="${PADL}" x2="${W-PADR}" y1="${yy}" y2="${yy}" stroke="#eceef0" stroke-width="1"/>`+
+       `<text x="${PADL-8}" y="${yy+3.5}" text-anchor="end" font-size="10.5" fill="#767b82">${fx(v,0)}%</text>`;}
+  const nlab=Math.min(6,dates.length);
+  for(let k=0;k<nlab;k++){const i=Math.round(k*(dates.length-1)/(nlab-1||1));
+    g+=`<text x="${x(i)}" y="${H-12}" text-anchor="middle" font-size="10.5" fill="#767b82">${dates[i]}</text>`;}
+  const area=(arr,fill)=>{let d=`M ${x(0)} ${y(0)}`;for(let i=0;i<arr.length;i++)d+=` L ${x(i)} ${y(arr[i])}`;
+    d+=` L ${x(arr.length-1)} ${y(0)} Z`;return `<path d="${d}" fill="${fill}" stroke="none"/>`;};
+  const line=(arr,col,w)=>{let d="";for(let i=0;i<arr.length;i++)d+=(i?" L":"M")+` ${x(i)} ${y(arr[i])}`;
+    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}"/>`;};
+  g+=area(DS,"rgba(154,160,166,0.30)")+line(DS,css("var(--spy)"),1.4);
+  g+=area(DA,"rgba(42,120,214,0.10)")+line(DA,css("var(--a-lv)"),2.0);
+  g+=area(DB,"rgba(122,111,208,0.10)")+line(DB,css("var(--b-lv)"),2.0);
+  g+=`<line id="ddcross" x1="0" x2="0" y1="${PADT}" y2="${H-PADB}" stroke="#111" stroke-width="1" stroke-dasharray="2 2" style="display:none"/>`;
+  document.getElementById("ddchart").innerHTML=g;
+  dscale={x,y,dates,DA,DB,DS};
+  const ch=document.getElementById("ddchart");
+  ch.onmousemove=hoverDD;ch.onmouseleave=()=>document.getElementById("ddtip").style.display="none";
+  // tiles: TRUE full-history max drawdown + current
+  const full=k=>{const dd=ddSeries(nav(D.daily,k));return {mdd:Math.min(...dd),cur:dd[dd.length-1]};};
+  const T=[["A Inelastic","var(--a-pp)",full("A")],["B Gated Premium","var(--b-pp)",full("B")],["S&P 500 (held)","var(--spy)",full("SPY")]];
+  document.getElementById("dd-tiles").innerHTML=T.map(([lab,c,f])=>
+    `<div class="tile"><div class="lbl"><span class="dot" style="background:${c}"></span>${lab}</div>
+      <div class="big neg">${fx(f.mdd,1)}%</div>
+      <div class="cap">worst peak-to-trough · currently ${f.cur<-0.05?fx(f.cur,1)+"% under water":"at a high"}</div></div>`).join("");
+}
+function hoverDD(ev){
+  if(!dscale)return;const r=ev.currentTarget.getBoundingClientRect();
+  const px=(ev.clientX-r.left)*W/r.width;
+  const n=dscale.dates.length,i=Math.max(0,Math.min(n-1,Math.round((px-PADL)/((W-PADL-PADR)/Math.max(1,n-1)))));
+  const cr=document.getElementById("ddcross");if(cr){cr.setAttribute("x1",dscale.x(i));cr.setAttribute("x2",dscale.x(i));cr.style.display="block";}
+  const t=document.getElementById("ddtip");t.style.display="block";
+  t.textContent=`${dscale.dates[i]}\nA  ${fx(dscale.DA[i],1)}%\nB  ${fx(dscale.DB[i],1)}%\nS&P ${fx(dscale.DS[i],1)}%`;
+  const bx=document.getElementById("ddbox").getBoundingClientRect();
+  t.style.left=Math.min(ev.clientX-bx.left+14,bx.width-160)+"px";
+  t.style.top=(ev.clientY-bx.top+10)+"px";
+}
+
+/* ==================== LOGS ==================== */
+function fillLogs(){
+  document.querySelector("#up tbody").innerHTML=D.logs_upcoming.map(u=>`<tr>
+    <td>${u.when==="conditional"?"—":u.when==="resting"?"resting order":u.when}</td>
+    <td>${u.strategy}</td>
+    <td><span class="ph ${u.type==="fixed"?"backtest":"paper"}">${u.type}</span></td>
+    <td>${u.text}</td></tr>`).join("");
+  document.querySelector("#past tbody").innerHTML=D.logs_past.map(t=>`<tr>
+    <td>${t.date}</td><td><span class="ph ${t.phase}">${t.phase}</span></td>
+    <td>${t.strategy}</td><td>${t.text}</td><td class="num">${t.impact_pct}</td></tr>`).join("");
+}
+</script>
+</body>
+</html>
