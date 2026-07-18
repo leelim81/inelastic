@@ -223,10 +223,13 @@ const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v.slice
 const RANGES=["1M","3M","6M","YTD","1Y","LIVE","MAX"];
 let perf={preset:"6M",res:"daily",a:0,b:0}, ddr={preset:"MAX",res:"monthly",a:0,b:0}, hmKey="A";
 
-Promise.all([
-  fetch("data.json").then(r=>r.json()),
-  fetch("live.json").then(r=>r.ok?r.json():null).catch(()=>null)   // absent until the box publishes
-]).then(([d,l])=>{D=d;L=l;init();});
+function loadLive(){return fetch("live.json?t="+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);} // cache-bust
+Promise.all([fetch("data.json").then(r=>r.json()), loadLive()]).then(([d,l])=>{
+  D=d;L=l;init();
+  setInterval(()=>loadLive().then(nl=>{ if(!nl)return; L=nl;             // re-pull live.json every 5 min
+    document.getElementById("tab-portfolio").hidden=!(L&&L.account);
+    setCur();renderLiveBar();renderPortfolio();fillLogs(); }),300000);
+});
 
 /* ---------- helpers ---------- */
 const mean=x=>x.reduce((s,v)=>s+v,0)/x.length;
