@@ -90,6 +90,14 @@
   table.hm td{border-bottom:1px solid #f0f1f2;padding:7px 6px;text-align:right;font-variant-numeric:tabular-nums}
   table.hm td.yr{text-align:left;font-weight:700;color:var(--ink)}
   table.hm td.ytd{font-weight:700;border-left:1px solid var(--hair)}
+  #pf-pos{min-width:620px}
+  #navbox{border:1px solid var(--hair)}
+  .livebar{display:flex;flex-wrap:wrap;gap:14px 18px;align-items:center;padding:9px 14px;
+    border:1px solid var(--hair);border-top:none;background:var(--panel);font-size:12px;letter-spacing:.02em}
+  .livebar .dotlive{width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block;
+    margin-right:7px;vertical-align:1px;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .livebar b{font-variant-numeric:tabular-nums}
   .footer{margin-top:56px;border-top:2px solid var(--ink);padding-top:12px;font-size:11px;
           color:var(--gray);line-height:1.6}
   @media (max-width:720px){
@@ -111,10 +119,12 @@
   </header>
   <nav>
     <button id="tab-perf" class="on">Performance</button>
+    <button id="tab-portfolio" hidden>Portfolio</button>
     <button id="tab-record">Track Record</button>
     <button id="tab-dd">Drawdown</button>
     <button id="tab-logs">Logs</button>
   </nav>
+  <div class="livebar" id="livebar" style="display:none"></div>
 
   <!-- ============================ PERFORMANCE ============================ -->
   <section id="perf">
@@ -180,6 +190,18 @@
     <div class="legend" id="dd-legend"></div>
   </section>
 
+  <!-- ============================ PORTFOLIO (live paper, real $) ============================ -->
+  <section id="portfolio" hidden>
+    <div class="tiles" id="pf-tiles"></div>
+    <div class="controls"><h2>Net liquidation value<span class="hint"> · live paper account, actual dollars</span></h2></div>
+    <div class="note" id="pf-asof"></div>
+    <div id="navbox"><svg id="navchart" viewBox="0 0 1040 420" preserveAspectRatio="none"></svg></div>
+    <div class="controls" style="margin-top:30px"><h2>Open positions<span class="hint"> · real quantities &amp; values</span></h2></div>
+    <div class="tscroll"><table id="pf-pos"><thead><tr>
+      <th>Contract</th><th>Class</th><th class="num">Qty</th><th class="num">Market value</th><th class="num">Unrealized P&amp;L</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+
   <!-- ============================ LOGS ============================ -->
   <section id="logs" hidden>
     <h2 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase">Upcoming — next month</h2>
@@ -194,14 +216,17 @@
 </div>
 
 <script>
-let D=null;
+let D=null, L=null;   // D = backtest seed (percent); L = live paper book (real $), optional
 const COL={A:{backtest:"var(--a-bt)",paper:"var(--a-pp)",live:"var(--a-lv)"},
            B:{backtest:"var(--b-bt)",paper:"var(--b-pp)",live:"var(--b-lv)"},SPY:"var(--spy)"};
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v.slice(4,-1)).trim()||v;
 const RANGES=["1M","3M","6M","YTD","1Y","LIVE","MAX"];
 let perf={preset:"6M",res:"daily",a:0,b:0}, ddr={preset:"MAX",res:"monthly",a:0,b:0}, hmKey="A";
 
-fetch("data.json").then(r=>r.json()).then(d=>{D=d;init();});
+Promise.all([
+  fetch("data.json").then(r=>r.json()),
+  fetch("live.json").then(r=>r.ok?r.json():null).catch(()=>null)   // absent until the box publishes
+]).then(([d,l])=>{D=d;L=l;init();});
 
 /* ---------- helpers ---------- */
 const mean=x=>x.reduce((s,v)=>s+v,0)/x.length;
@@ -263,14 +288,17 @@ function init(){
   document.getElementById("back").onclick=()=>panPerf(-1);
   document.getElementById("fwd").onclick=()=>panPerf(1);
   document.getElementById("tab-perf").onclick=()=>tab("perf");
+  document.getElementById("tab-portfolio").onclick=()=>tab("portfolio");
   document.getElementById("tab-record").onclick=()=>tab("record");
   document.getElementById("tab-dd").onclick=()=>tab("dd");
   document.getElementById("tab-logs").onclick=()=>tab("logs");
   const c=document.getElementById("chart");
   c.addEventListener("mousemove",hoverPerf);c.addEventListener("mouseleave",()=>tip.style.display="none");
 
+  if(L&&L.account){document.getElementById("tab-portfolio").hidden=false;}   // live book exists -> show Portfolio
+  renderLiveBar();
   setPreset(perf,perf.preset);setPreset(ddr,ddr.preset);
-  drawPerf();renderRecord();drawDD();fillLogs();
+  drawPerf();renderRecord();drawDD();renderPortfolio();fillLogs();
 }
 function buildSeg(id,items,cur,cb){
   const el=document.getElementById(id);
@@ -288,8 +316,8 @@ function panPerf(dir){
   let a=perf.a+dir*step;a=Math.max(0,Math.min(a,n-1-w));perf.a=a;perf.b=a+w;perf.preset="";
   document.querySelectorAll("#perf-range button").forEach(b=>b.classList.remove("on"));drawPerf();}
 function tab(t){
-  for(const s of["perf","record","dd","logs"])document.getElementById(s).hidden=(s!==t);
-  for(const s of["perf","record","dd","logs"])
+  for(const s of["perf","portfolio","record","dd","logs"])document.getElementById(s).hidden=(s!==t);
+  for(const s of["perf","portfolio","record","dd","logs"])
     document.getElementById("tab-"+s).classList.toggle("on",s===t);
 }
 
@@ -500,15 +528,86 @@ function hoverDD(ev){
 }
 
 /* ==================== LOGS ==================== */
+/* ==================== LIVE PAPER (real $) ==================== */
+const usd=v=>v==null?"—":"$"+Math.round(v).toLocaleString("en-US");
+const usdS=v=>v==null?"":(v>=0?"+":"−")+"$"+Math.abs(Math.round(v)).toLocaleString("en-US");
+const clip=s=>(s||"").replace("T"," ").slice(0,16);
+
+function renderLiveBar(){
+  const el=document.getElementById("livebar"), a=L&&L.account;
+  if(!a){el.style.display="none";return;}
+  el.style.display="";
+  el.innerHTML=`<span><span class="dotlive"></span><b style="letter-spacing:.12em">LIVE PAPER</b></span>
+    <span>NLV <b>${usd(a.nlv)}</b></span>
+    <span style="color:var(--gray)">as of ${clip(a.asof)}</span>
+    ${L.halt?'<span style="color:var(--red);font-weight:700">· HALT active</span>':''}
+    <span style="margin-left:auto;color:var(--gray)">auto-updates ~15 min</span>`;
+}
+
+function renderPortfolio(){
+  const a=L&&L.account, T=document.getElementById("pf-tiles");
+  if(!a){T.innerHTML=`<div class="tile"><div class="lbl">Live paper book</div><div class="big">—</div>
+     <div class="cap">not available yet — publishes once the box is live</div></div>`;
+     document.querySelector("#pf-pos tbody").innerHTML=`<tr><td colspan="5" style="color:var(--gray)">—</td></tr>`;return;}
+  const navs=(L.nav||[]), first=navs.length?navs[0][1]:a.nlv, since=first?(a.nlv/first-1)*100:0;
+  T.innerHTML=`
+    <div class="tile"><div class="lbl">Net liquidation</div><div class="big">${usd(a.nlv)}</div>
+      <div class="cap">paper · as of ${clip(a.asof)}</div></div>
+    <div class="tile"><div class="lbl">Cash</div><div class="big">${usd(a.cash)}</div>
+      <div class="cap">maint margin ${usd(a.maint_margin)} · excess liq ${usd(a.excess_liq)}</div></div>
+    <div class="tile"><div class="lbl">Since paper start</div><div class="big ${cls(since)}">${sgn(since,2)}</div>
+      <div class="cap">${navs.length>1?navs.length+" trading days":"first day"}</div></div>`;
+  document.getElementById("pf-asof").textContent=
+    "Live paper book — regenerated on the box ~every 15 minutes; account as of "+clip(a.asof)+".";
+  const pos=(L.positions||[]);
+  document.querySelector("#pf-pos tbody").innerHTML=pos.length
+    ? pos.map(p=>`<tr>
+        <td class="name">${[p.symbol,p.right,p.strike,p.expiry].filter(x=>x!=null&&x!=="").join(" ")}</td>
+        <td>${p.secType||""}</td><td class="num">${p.qty??""}</td>
+        <td class="num">${p.mktValue!=null?usd(p.mktValue):""}</td>
+        <td class="num ${(p.uPnL||0)>=0?"pos":"neg"}">${usdS(p.uPnL)}</td></tr>`).join("")
+    : `<tr><td colspan="5" style="color:var(--gray)">Flat — no open positions (core mix not yet allocated).</td></tr>`;
+  drawNav();
+}
+
+function drawNav(){
+  const el=document.getElementById("navchart"), s=(L&&L.nav)||[];
+  if(!s.length){el.innerHTML="";return;}
+  const vals=s.map(r=>r[1]), dates=s.map(r=>r[0]);
+  let lo=Math.min(...vals),hi=Math.max(...vals); if(hi-lo<1){lo-=Math.max(1,hi*0.002);hi+=Math.max(1,hi*0.002);}
+  const pad=(hi-lo)*0.12||1;lo-=pad;hi+=pad;
+  const x=i=>PADL+(W-PADL-PADR)*(s.length>1?i/(s.length-1):0.5), y=v=>PADT+(H-PADT-PADB)*(1-(v-lo)/(hi-lo));
+  let g="";
+  for(let t=0;t<=5;t++){const v=lo+(hi-lo)*t/5,yy=y(v);
+    g+=`<line x1="${PADL}" x2="${W-PADR}" y1="${yy}" y2="${yy}" stroke="#eceef0" stroke-width="1"/>`+
+       `<text x="${PADL-8}" y="${yy+3.5}" text-anchor="end" font-size="10.5" fill="#767b82">${usd(v)}</text>`;}
+  const nl=Math.min(6,dates.length);
+  for(let k=0;k<nl;k++){const i=Math.round(k*(dates.length-1)/(nl-1||1));
+    g+=`<text x="${x(i)}" y="${H-12}" text-anchor="middle" font-size="10.5" fill="#767b82">${dates[i]}</text>`;}
+  if(s.length>1){let d=`M ${x(0)} ${y(vals[0])}`;for(let i=1;i<s.length;i++)d+=` L ${x(i)} ${y(vals[i])}`;
+    g+=`<path d="${d} L ${x(s.length-1)} ${y(lo)} L ${x(0)} ${y(lo)} Z" fill="rgba(42,120,214,0.08)" stroke="none"/>`+
+       `<path d="${d}" fill="none" stroke="${css('var(--a-lv)')}" stroke-width="2.2"/>`;}
+  const i=s.length-1;
+  g+=`<circle cx="${x(i)}" cy="${y(vals[i])}" r="3.5" fill="${css('var(--a-lv)')}"/>`+
+     `<text x="${W-PADR}" y="${y(vals[i])-8}" text-anchor="end" font-size="12" font-weight="700" fill="${css('var(--a-lv)')}">${usd(vals[i])}</text>`;
+  el.innerHTML=g;
+}
+
 function fillLogs(){
-  document.querySelector("#up tbody").innerHTML=D.logs_upcoming.map(u=>`<tr>
+  const up=(L&&L.upcoming)?L.upcoming.map(u=>({when:"conditional",strategy:u.program,type:u.type,text:u.text})):D.logs_upcoming;
+  document.querySelector("#up tbody").innerHTML=up.map(u=>`<tr>
     <td>${u.when==="conditional"?"—":u.when==="resting"?"resting order":u.when}</td>
     <td>${u.strategy}</td>
     <td><span class="ph ${u.type==="fixed"?"backtest":"paper"}">${u.type}</span></td>
     <td>${u.text}</td></tr>`).join("");
-  document.querySelector("#past tbody").innerHTML=D.logs_past.map(t=>`<tr>
+  const liveTx=L&&L.transactions&&L.transactions.length;
+  const past=liveTx?L.transactions.map(t=>({date:clip(t.t),phase:"live",strategy:"—",
+      text:t.text+(t.qty!=null?` · qty ${t.qty}`:"")+(t.price?` @ ${t.price}`:""),impact_pct:""})):D.logs_past;
+  document.querySelector("#past tbody").innerHTML=past.map(t=>`<tr>
     <td>${t.date}</td><td><span class="ph ${t.phase}">${t.phase}</span></td>
     <td>${t.strategy}</td><td>${t.text}</td><td class="num">${t.impact_pct}</td></tr>`).join("");
+  const notes=document.querySelectorAll("#logs .upnote");
+  if(liveTx&&notes[1])notes[1].textContent="Live paper book — actual instrument class, direction, quantity and price.";
 }
 </script>
 </body>
