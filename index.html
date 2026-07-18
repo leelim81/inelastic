@@ -193,7 +193,7 @@
   <!-- ============================ PORTFOLIO (live paper, real $) ============================ -->
   <section id="portfolio" hidden>
     <div class="tiles" id="pf-tiles"></div>
-    <div class="controls"><h2>Net liquidation value<span class="hint"> · live paper account, actual dollars</span></h2></div>
+    <div class="controls"><h2>Net liquidation value<span class="hint"> · live paper account, actual account currency</span></h2></div>
     <div class="note" id="pf-asof"></div>
     <div id="navbox"><svg id="navchart" viewBox="0 0 1040 420" preserveAspectRatio="none"></svg></div>
     <div class="controls" style="margin-top:30px"><h2>Open positions<span class="hint"> · real quantities &amp; values</span></h2></div>
@@ -296,6 +296,7 @@ function init(){
   c.addEventListener("mousemove",hoverPerf);c.addEventListener("mouseleave",()=>tip.style.display="none");
 
   if(L&&L.account){document.getElementById("tab-portfolio").hidden=false;}   // live book exists -> show Portfolio
+  setCur();
   renderLiveBar();
   setPreset(perf,perf.preset);setPreset(ddr,ddr.preset);
   drawPerf();renderRecord();drawDD();renderPortfolio();fillLogs();
@@ -528,9 +529,12 @@ function hoverDD(ev){
 }
 
 /* ==================== LOGS ==================== */
-/* ==================== LIVE PAPER (real $) ==================== */
-const usd=v=>v==null?"—":"$"+Math.round(v).toLocaleString("en-US");
-const usdS=v=>v==null?"":(v>=0?"+":"−")+"$"+Math.abs(Math.round(v)).toLocaleString("en-US");
+/* ==================== LIVE PAPER (real, account currency) ==================== */
+const CURSYM={SGD:"S$",USD:"$",EUR:"€",GBP:"£",HKD:"HK$",AUD:"A$",CAD:"C$",JPY:"¥",CHF:"CHF "};
+let CUR="$", CURCODE="";                                          // set from the account's base currency
+function setCur(){const c=L&&L.account&&L.account.currency;CURCODE=c||"";CUR=c?(CURSYM[c]||c+" "):"$";}
+const usd=v=>v==null?"—":CUR+Math.round(v).toLocaleString("en-US");
+const usdS=v=>v==null?"":(v>=0?"+":"−")+CUR+Math.abs(Math.round(v)).toLocaleString("en-US");
 const clip=s=>(s||"").replace("T"," ").slice(0,16);
 
 function renderLiveBar(){
@@ -558,7 +562,8 @@ function renderPortfolio(){
     <div class="tile"><div class="lbl">Since paper start</div><div class="big ${cls(since)}">${sgn(since,2)}</div>
       <div class="cap">${navs.length>1?navs.length+" trading days":"first day"}</div></div>`;
   document.getElementById("pf-asof").textContent=
-    "Live paper book — regenerated on the box ~every 15 minutes; account as of "+clip(a.asof)+".";
+    "Live paper book"+(CURCODE?` · base currency ${CURCODE}`:"")+
+    " — regenerated on the box ~every 15 minutes; account as of "+clip(a.asof)+".";
   const pos=(L.positions||[]);
   document.querySelector("#pf-pos tbody").innerHTML=pos.length
     ? pos.map(p=>`<tr>
